@@ -1,6 +1,13 @@
 #!/bin/bash
 source $(dirname $(realpath $0))/settings
 
+known_commands=(create_ca create_root_ca create_sub_ca destroy_ca rotate_crl update_crl update_cron update_ocsp_resp)
+if [[ $1 && ${known_commands[*]} =~ $1 ]]; then
+    cmd=$1
+    shift
+    exec ${BIN_DIR}/${cmd} "$@"
+fi
+
 # wrapper around RSA - local directory (in container) may be different than external
 let index=1
 for a in "$@"; do
