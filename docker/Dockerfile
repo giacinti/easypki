@@ -7,7 +7,7 @@ VOLUME /data/pki
 RUN mkdir -p /data/pub
 VOLUME /data/pub
 
-RUN apk add --update --no-cache openssl bash coreutils nginx \
+RUN apk add --update --no-cache openssl bash coreutils nginx git \
     && apk add libfaketime --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing
 
 # needed by nginx
