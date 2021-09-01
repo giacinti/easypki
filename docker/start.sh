@@ -1,14 +1,8 @@
 #!/bin/sh
 DATA_PKI=/data/pki
 BIN_DIR=${DATA_PKI}/bin
-if [ ! -e ${BIN_DIR}/easypki ]; then
-    # install from gitub
-    cd ${DATA_PKI}
-    git clone https://github.com/giacinti/easypki.git
-    mv easypki/* .
-    rmdir easypki
-fi
-
+GIT_REPO=https://github.com/giacinti/easypki.git
+[ ! -e ${BIN_DIR}/easypki ] && git -C ${DATA_PKI} clone ${GIT_REPO} ${DATA_PKI}
 
 REALSTART=${BIN_DIR}/start
 
