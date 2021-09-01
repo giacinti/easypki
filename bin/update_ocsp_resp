@@ -1,0 +1,141 @@
+#!/bin/bash
+source $(dirname $(realpath $0))/settings
+
+# current: [CA_NAME] => [pid, port, index, rsigner, rkey, CA, text, out]
+declare -A current;
+
+# expected: [CA_NAME] => [script, index, rsigner, rkey, CA, text, out]
+declare -A expected;
+
+# ports
+next_port=8000
+
+# update_proxy?
+do_update_proxy=""
+
+parse_command () {
+    cmd=$1
+    typeset -n var=$2
+    var[text]=0
+    # need to process param one by one - order may change
+    [[ $cmd =~ \-port([^-]+) ]] && var[port]=${BASH_REMATCH[1]}
+    [[ $cmd =~ \-index([^-]+) ]] && var[index]=${BASH_REMATCH[1]}
+    [[ $cmd =~ \-rsigner([^-]+) ]] && var[rsigner]=${BASH_REMATCH[1]}
+    [[ $cmd =~ \-rkey([^-]+) ]] && var[rkey]=${BASH_REMATCH[1]}
+    [[ $cmd =~ \-CA([^-]+) ]] && var[CA]=${BASH_REMATCH[1]}
+    [[ $cmd =~ \-text ]] && var[text]=1
+    [[ $cmd =~ \-out([^-]+) ]] && var[out]=${BASH_REMATCH[1]}
+    
+    var[CA_NAME]="undef"
+    [[ ${var[CA]} =~ ${DATA_PKI}/([^/]+) ]] && var[CA_NAME]=${BASH_REMATCH[1]}
+}
+
+print_ass () {
+    varname="$1"
+    typeset -n var=$1
+    for k in "${!var[@]}"; do
+	echo "${varname}[$k]=${var[$k]}"
+    done
+    
+}
+
+build_current () {
+    declare -A curp
+    for pid in $(ps -o pid,args |grep "openssl ocsp"| awk '{print $1}'); do
+	if [[ -r /proc/$pid/cmdline ]]; then
+	    cmdline=$(tr -d '\0' <  /proc/$pid/cmdline)
+	    curp[pid]=${pid}
+	    parse_command $cmdline curp
+	    [[ ${DEBUG} -ge 2 ]] && print_ass curp
+	    current[${curp[CA_NAME]}]="${curp[pid]} ${curp[port]} ${curp[index]} ${curp[rsigner]} ${curp[rkey]} ${curp[CA]} ${curp[text]} ${curp[out]}"
+
+	    # update ports
+	    [[ ${curp[port]} -ge ${next_port} ]] && next_port=$((${curp[port]} + 1))
+	fi
+    done
+}
+
+build_expected () {
+    declare -A expp
+    for script in ${OCSP_DIR}/bin/*; do
+	cmdline=$(< ${script})
+	expp[script]=${script}
+	parse_command "$cmdline" expp
+	[[ ${DEBUG} -ge 2 ]] && print_ass expp
+	expected[${expp[CA_NAME]}]="${expp[script]} ${expp[index]} ${expp[rsigner]} ${expp[rkey]} ${expp[CA]} ${expp[text]} ${expp[out]}"
+    done
+}
+
+start_expected () {
+    for ca in "${!expected[@]}"; do
+	exp=${expected[$ca]}
+	cur=${current[$ca]}
+	eval "expa=(${exp})"
+	
+	restart="true"
+	if [[ -n "${cur}" ]]; then
+	    # ocsp responder already running for this CA
+	    eval "cura=(${cur})"
+	    [[ ${DEBUG} ]] && echo "${ca} already running"
+	    if [[ "${expa[@]:1}" = "${cura[@]:2}" ]]; then
+		# ok - no restart
+		restart=""
+	    else
+		# need to restart - kill previous
+		[[ ${DEBUG} ]] && echo "params changed, kill previous ${cura[0]}"
+		kill ${cura[0]}
+		do_update_proxy="true"
+	    fi
+	    unset current[$ca]
+	fi
+	if [[ ${restart} ]]; then
+	    # need to start responder
+	    cmd=`cat ${expa[0]} | sed -e "s|%PORT%|${next_port}|"`
+	    let next_port++
+	    [[ ${DEBUG} ]] && echo "starting ocsp responder for ${ca}"
+	    eval "nohup ${cmd} >/dev/null 2>&1 &"
+	    do_update_proxy="true"
+	fi
+    done
+}
+
+kill_not_expected () {
+    # loop over remaining current not expected
+    for ca in "${!current[@]}"; do
+	cur=${current[$ca]}
+	eval "cura=(${cur})"
+	[[ ${DEBUG} ]] && echo "killing unexpected responder for ${ca}"
+	kill ${cura[0]}
+	do_update_proxy="true"	
+    done
+}
+
+update_proxy () {
+    : >${PROXY_CONF}
+    for ca in "${!current[@]}"; do
+	[[ ${DEBUG} ]] && echo "update proxy for CA $ca"
+	cur=${current[$ca]}
+	eval "cura=(${cur})"
+	cat <<EOF >>${PROXY_CONF}
+location /ocsp/${ca} {
+	proxy_pass http://localhost:${cura[1]};
+}
+
+EOF
+    done
+    # first time nginx is not yet started
+    [[ -e /run/nginx/nginx.pid ]] && /usr/sbin/nginx -s reload
+}
+
+build_current
+build_expected
+start_expected
+kill_not_expected
+
+if [[ ${do_update_proxy} ]]; then
+    [[ ${DEBUG} ]] && echo "need to update proxy"
+    unset current
+    declare -A current
+    build_current
+    update_proxy
+fi

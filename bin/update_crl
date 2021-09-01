@@ -1,0 +1,33 @@
+#!/bin/bash
+
+source $(dirname $(realpath $0))/settings
+
+CA_NAME=$1
+CA_PASSWD=$2
+
+if [ -z "${CA_NAME}" ]; then # permit empty passwrd
+    read -p "Enter CA name: " CA_NAME
+    read -s -p "Enter CA password: " CA_PASSWD; echo
+fi
+
+export CA_NAME
+export CA_PASSWD
+
+curdate=`date +%Y-%m`
+enddate="2038-01"
+
+CA_DIR=${DATA_PKI}/${CA_NAME}
+CRLS_DIR=${CA_DIR}/crls
+[ -d ${CRLS_DIR} ] || mkdir -p ${CRLS_DIR}
+
+TZ=UTC
+until [ "$curdate" = "$enddate" ]; do
+    suffix=`echo $curdate | sed -e 's/-//'`
+    fktime "$curdate-01 00:00:00" easyrsa --batch --pki-dir=${CA_DIR} --passin="env:CA_PASSWD" gen-crl >/dev/null 2>&1
+    openssl crl -in ${CA_DIR}/crl.pem -outform DER -out ${CRLS_DIR}/crl-${suffix}.der
+    rm -f ${CA_DIR}/crl.pem
+    echo "CRL for $curdate generated"
+    curdate=`date --date "$curdate-01 1 month" +%Y-%m`
+done
+
+${BIN_DIR}/rotate_crl ${CA_NAME}

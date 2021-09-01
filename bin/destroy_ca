@@ -1,0 +1,56 @@
+#!/bin/bash
+source $(dirname $(realpath $0))/settings
+
+read -p "CA name: " CA_NAME
+read -p "Do you confirm (enter the CA name again): " CA_NAME2
+if [[ ! "${CA_NAME}" = "${CA_NAME2}" ]]; then
+    echo "names do not match. Aborting..."
+    exit 0
+fi
+
+#
+CA_DIR=${DATA_PKI}/${CA_NAME}
+CA_CERT=${CA_DIR}/ca.crt
+if [[ ! -e ${CA_CERT} ]]; then
+    echo "ERROR: CA ${CA_NAME} not found."
+    exit 1
+fi
+SUBJECT_DN=$(openssl x509 -in ${CA_CERT} -subject -noout | sed -e 's|subject=||')
+ISSUER_DN=$(openssl x509 -in ${CA_CERT} -issuer -noout | sed -e 's|issuer=||')
+
+if [[ "${SUBJECT_DN}" = "${ISSUER_DN}" ]]; then # this is a root CA - be careful
+    echo "WARNING: ${CA_NAME} is a root CA"
+    read -p "Do you really want to destroy it (yes/no) [no]: " answer
+    answer=${answer:-"no"}
+    if [[ "${answer}" = "yes" ]]; then
+	read -p "Are you really sure ? (yes/no) [no]: " answer2
+	answer2=${answer2:-"no"}
+	answer=${answer2}
+    fi
+    if [[ ! "${answer}" = "yes" ]]; then
+	echo "Aborting..."
+	exit 0
+    fi
+fi
+
+### ok - let proceed now...
+
+# delete CA directory
+echo "removing directory"
+rm -rf ${CA_DIR}
+
+# public data
+echo "removing public data"
+rm -f ${PUB_DIR}/${CA_NAME}.crt
+rm -f ${PUB_DIR}/${CA_NAME}.crl
+
+# cron job
+echo "removing crl update cron job"
+rm -f ${CRON_DIR}/rotate_crl_${CA_NAME}
+${BIN_DIR}/update_cron
+
+# OCSP responder
+echo "removing ocsp responder"
+rm -f ${OCSP_DIR}/bin/ocsp_${CA_NAME}
+${BIN_DIR}/update_ocsp_resp
+

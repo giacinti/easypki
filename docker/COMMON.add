@@ -1,0 +1,2 @@
+authorityInfoAccess     = caIssuers;URI:${ENV::PKI_BASE_URL}/pub/${ENV::CA_NAME}.crt,OCSP;URI:${ENV::PKI_BASE_URL}/ocsp/${ENV::CA_NAME}
+crlDistributionPoints   = URI:${ENV::PKI_BASE_URL}/pub/${ENV::CA_NAME}.crl

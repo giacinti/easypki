@@ -1,0 +1,16 @@
+#!/bin/bash
+source $(dirname $(realpath $0))/settings
+
+# prepare cron jobs
+${BIN_DIR}/update_cron
+
+# start cron
+/usr/sbin/crond -b
+
+# start ocsp responders
+${BIN_DIR}/update_ocsp_resp
+
+# main process
+#exec ${BIN_DIR}/ocsp_manager
+exec /usr/sbin/nginx
+

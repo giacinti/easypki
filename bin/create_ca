@@ -1,0 +1,76 @@
+#!/bin/bash
+source $(dirname $(realpath $0))/settings
+
+MODE=""
+if [ "$(basename $0)" = "create_root_ca" ]; then
+    MODE="root"
+elif [ "$(basename $0)" = "create_sub_ca" ]; then
+    MODE="sub"
+else
+    read -p "Do you want to create a root or sub CA ? (root/sub)[sub]:" MODE
+    MODE=${MODE:-"sub"}
+fi
+
+if [ "$MODE" = "sub" ]; then
+    read -p "Root CA name: " ROOT_CA_NAME
+    read -s -p "Root CA password: " ROOT_CA_PASSWD; echo
+    export ROOT_CA_PASSWD
+    ROOT_CA_DIR=${DATA_PKI}/${ROOT_CA_NAME}
+fi
+
+read -p "CA name: " CA_NAME
+read -p "CA CN [${CA_NAME}]: " CA_CN
+CA_CN=${CA_CN:-${CA_NAME}}
+read -s -p "CA password: " CA_PASSWD; echo
+export CA_PASSWD
+read -p "VARS template [${COMMON_DIR}/vars.tmpl]: " VARS_TMPL
+VARS_TMPL=${VARS_TMPL:-${COMMON_DIR}/vars.tmpl}
+read -p "Limit date [2038-01-18]: " LIMIT_DATE
+LIMIT_DATE=${LIMIT_DATE:-"2038-01-18"}
+
+# init pki dir
+CA_DIR=${DATA_PKI}/${CA_NAME}
+easyrsa --pki-dir=${CA_DIR} init-pki
+cat ${VARS_TMPL} | sed -e "s/%CA_NAME%/${CA_NAME}/g" > ${CA_DIR}/vars
+
+# build root ca
+DAYS=`days_to "${LIMIT_DATE}"`
+SUBCA=""
+[ "$MODE" = "sub" ] && SUBCA="subca"
+if [ -z "${CA_PASSWD}" ]; then
+    easyrsa --batch --pki-dir=${CA_DIR} --req-cn="${CA_CN}" --days=${DAYS} build-ca ${SUBCA} nopass
+else
+    easyrsa --batch --passin="env:CA_PASSWD" --passout="env:CA_PASSWD" --pki-dir=${CA_DIR} --req-cn="${CA_CN}" --days=${DAYS} build-ca ${SUBCA}
+fi
+if [ "$MODE" = "sub" ]; then
+    easyrsa --batch --pki-dir=${ROOT_CA_DIR} import-req ${CA_DIR}/reqs/ca.req ${CA_NAME}
+    easyrsa --batch --passin="env:ROOT_CA_PASSWD" --passout="env:ROOT_CA_PASSWD" --pki-dir=${ROOT_CA_DIR} --days=${DAYS} sign-req ca ${CA_NAME}
+    cp ${ROOT_CA_DIR}/issued/${CA_NAME}.crt ${CA_DIR}/ca.crt
+fi
+
+# public certificate
+#openssl x509 -in ${CA_DIR}/ca.crt -outform DER > ${PUB_DIR}/${CA_NAME}.crt
+: > ${PUB_DIR}/${CA_NAME}.crt
+[[ "$MODE" = "sub" ]] && cat ${ROOT_CA_DIR}/ca.crt >> ${PUB_DIR}/${CA_NAME}.crt
+cat ${CA_DIR}/ca.crt >> ${PUB_DIR}/${CA_NAME}.crt
+
+# CRLs generation & rotation
+${BIN_DIR}/update_crl ${CA_NAME} ${CA_PASSWD}
+CRON_EXE=${CRON_DIR}/rotate_crl_${CA_NAME}
+[ -d $(dirname ${CRON_EXE}) ] || mkdir -p $(dirname ${CRON_EXE})
+cat ${COMMON_DIR}/rotate_crl_cron.tmpl | sed -e "s,%CA_NAME%,${CA_NAME},g" | sed -e "s,%BIN_DIR%,${BIN_DIR},g" > ${CRON_EXE}
+chmod +x ${CRON_EXE}
+${BIN_DIR}/update_cron
+
+# OCSP responder
+OCSP_CA="${CA_CN} OCSP Responder"
+easyrsa --batch --pki-dir=${CA_DIR} --req-cn="${OCSP_CA}" gen-req ${CA_NAME}_OCSP nopass
+easyrsa --batch --passin="env:CA_PASSWD" --pki-dir=${CA_DIR} --days=${DAYS} sign-req ocsp ${CA_NAME}_OCSP
+OCSP_EXE=${OCSP_DIR}/bin/ocsp_${CA_NAME}
+[ -d $(dirname ${OCSP_EXE}) ] || mkdir -p $(dirname ${OCSP_EXE})
+cat >${OCSP_EXE}<<EOF
+openssl ocsp -index ${CA_DIR}/index.txt -port %PORT% -rsigner ${CA_DIR}/issued/${CA_NAME}_OCSP.crt -rkey ${CA_DIR}/private/${CA_NAME}_OCSP.key -CA ${CA_DIR}/ca.crt -text -out ${CA_DIR}/ocsp.log
+EOF
+chmod +x ${OCSP_EXE}
+${BIN_DIR}/update_ocsp_resp
+

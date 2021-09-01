@@ -1,0 +1,22 @@
+#!/bin/bash
+
+function days_to () {
+    echo $((((`date -u -d $1 +%s` - `date -u +%s`))/24/3600))
+}
+
+function fktime () {
+    FAKETIME="$1"
+    shift
+    env LD_PRELOAD=/usr/lib/faketime/libfaketime.so.1 FAKETIME="$FAKETIME" "$@"
+}
+
+export DATA_PKI=/data/pki
+export PUB_DIR=/data/pub/www
+export PROXY_CONF=/var/opt/nginx_ocsp.conf
+
+export COMMON_DIR=${DATA_PKI}/common
+export BIN_DIR=${DATA_PKI}/bin
+export CRON_DIR=${DATA_PKI}/cron
+export OCSP_DIR=${DATA_PKI}/ocsp
+
+export PATH="${BIN_DIR}:${PATH}"

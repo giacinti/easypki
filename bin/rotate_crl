@@ -1,0 +1,19 @@
+#!/bin/bash
+
+source $(dirname $(realpath $0))/settings
+
+usage () {
+    echo "USAGE: $0 <ca name>"
+    exit 1
+}
+
+CA_NAME=$1
+[ -n "${CA_NAME}" ] || usage
+
+CA_DIR=${DATA_PKI}/${CA_NAME}
+CRLS_DIR=${CA_DIR}/crls
+
+suffix=`date +%Y%m`
+
+openssl crl -inform der -in ${CRLS_DIR}/crl-${suffix}.der -outform pem -out ${PUB_DIR}/${CA_NAME}.crl
+

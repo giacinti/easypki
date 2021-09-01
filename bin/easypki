@@ -1,0 +1,19 @@
+#!/bin/bash
+source $(dirname $(realpath $0))/settings
+
+# wrapper around RSA - local directory (in container) may be different than external
+let index=1
+for a in "$@"; do
+    [[ "${a}" =~ "--ca=" ]] && break
+    let index++
+done
+
+if [[ $index -le $# ]]; then
+    p=${@:$index:1}
+    CA_NAME=${p/--ca=/}
+    let "ip1 = $index + 1"
+    let "im1 = $index - 1"
+    set -- "${@:1:$im1}" --pki-dir=${DATA_PKI}/${CA_NAME} "${@:$ip1}"
+fi
+
+exec easyrsa "$@"

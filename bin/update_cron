@@ -1,0 +1,62 @@
+#!/bin/bash
+source $(dirname $(realpath $0))/settings
+
+DEFAULT_SOURCE=${CRON_DIR}
+DEFAULT_TARGET=/etc/periodic/monthly
+
+usage() {
+    echo "USAGE: $0 [help] [<source> <target>]"
+    echo "default: source=${DEFAULT_SOURCE} target=${DEFAULT_TARGET}"
+    exit 1
+}
+
+if [[ $# -gt 0 ]]; then
+    SOURCE=$1; shift
+    TARGET=$1; shift
+    ([ "${SOURCE}" = "help" ] || [ -z "${SOURCE}" ] || [ -z "${TARGET}" ] || [ $# -gt 0 ]) && usage
+fi
+
+SOURCE=${SOURCE:-${DEFAULT_SOURCE}}
+TARGET=${TARGET:-${DEFAULT_TARGET}}
+
+declare -A src
+declare -A dst
+
+build_list () {
+    dir=$1
+    typeset -n var=$2
+    for f in ${dir}/*; do
+	[[ $f =~ rotate_crl_([^\s]+) ]] && var[${BASH_REMATCH[1]}]=$f
+    done
+    
+}
+
+build_source () {
+    build_list ${SOURCE} src
+}
+
+build_destination () {
+    build_list ${TARGET} dst
+}
+
+compare_and_update () {
+    for ca in "${!src[@]}"; do
+	srcf=${src[$ca]}
+	dstf=${dst[$ca]}
+
+	[[ -n "${dstf}" ]] && unset dst[$ca]
+	ln -sf ${srcf} ${TARGET}/.
+    done
+
+    for ca in "${!dst[@]}"; do
+	dstf=${dst[$ca]}
+	rm -f ${dstf}
+    done
+}
+
+build_source
+build_destination
+compare_and_update
+
+
+
