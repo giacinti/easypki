@@ -12,17 +12,28 @@ else
 fi
 
 if [ "$MODE" = "sub" ]; then
-    read -p "Root CA name: " ROOT_CA_NAME
-    read -s -p "Root CA password: " ROOT_CA_PASSWD; echo
-    export ROOT_CA_PASSWD
-    ROOT_CA_DIR=${DATA_PKI}/${ROOT_CA_NAME}
+    pwd_check_ok=""
+    while [[ ! "${pwd_check_ok}" ]]; do
+	read -p "Root CA name: " ROOT_CA_NAME
+	read -s -p "Root CA password: " ROOT_CA_PASSWD; echo
+	export ROOT_CA_PASSWD
+	ROOT_CA_DIR=${DATA_PKI}/${ROOT_CA_NAME}
+	`openssl pkey -in ${ROOT_CA_NAME}/private/ca.key -passin "pass:${ROOT_CA_PASSWD}" -noout >/dev/null 2>&1` && pwd_check_ok="ok"
+	[[ ! "${pwd_check_ok}" ]] && echo "ERROR: Root password does not match. Try again"
+    done
 fi
 
 read -p "CA name: " CA_NAME
 read -p "CA CN [${CA_NAME}]: " CA_CN
 CA_CN=${CA_CN:-${CA_NAME}}
-read -s -p "CA password: " CA_PASSWD; echo
-export CA_PASSWD
+pwd_match=""
+while [[ ! "${pwd_match}" ]]; do
+    read -s -p "CA password: " CA_PASSWD; echo
+    export CA_PASSWD
+    read -s -p "Repeat password: " pwd2; echo
+    [[ "${CA_PASSWD}" = "${pwd2}" ]] && pwd_match="ok"
+    [[ ! "${pwd_match}" ]] && echo "ERROR: passwords do not match. Try again"
+done
 read -p "VARS template [${COMMON_DIR}/vars.tmpl]: " VARS_TMPL
 VARS_TMPL=${VARS_TMPL:-${COMMON_DIR}/vars.tmpl}
 read -p "Limit date [2038-01-18]: " LIMIT_DATE
