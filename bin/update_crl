@@ -8,6 +8,11 @@ CA_PASSWD=$2
 if [ -z "${CA_NAME}" ]; then # permit empty passwrd
     read -p "Enter CA name: " CA_NAME
     read -s -p "Enter CA password: " CA_PASSWD; echo
+else
+    if [ -z "${CA_PASSWD}" ]; then
+	read -s -p "Enter CA password (or nopass): " CA_PASSWD; echo
+	[[ "${CA_PASSWD}" = "nopass" ]] && CA_PASSWD=""
+    fi
 fi
 
 export CA_NAME

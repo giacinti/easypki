@@ -18,8 +18,8 @@ if [ "$MODE" = "sub" ]; then
 	read -s -p "Root CA password: " ROOT_CA_PASSWD; echo
 	export ROOT_CA_PASSWD
 	ROOT_CA_DIR=${DATA_PKI}/${ROOT_CA_NAME}
-	`openssl pkey -in ${ROOT_CA_NAME}/private/ca.key -passin "pass:${ROOT_CA_PASSWD}" -noout >/dev/null 2>&1` && pwd_check_ok="ok"
-	[[ ! "${pwd_check_ok}" ]] && echo "ERROR: Root password does not match. Try again"
+	`openssl pkey -in ${ROOT_CA_DIR}/private/ca.key -passin "pass:${ROOT_CA_PASSWD}" -noout >/dev/null 2>&1` && pwd_check_ok="ok"
+	[[ ! "${pwd_check_ok}" ]] && echo "ERROR: Root password incorrect. Try again"
     done
 fi
 
@@ -57,6 +57,7 @@ if [ "$MODE" = "sub" ]; then
     easyrsa --batch --pki-dir=${ROOT_CA_DIR} import-req ${CA_DIR}/reqs/ca.req ${CA_NAME}
     easyrsa --batch --passin="env:ROOT_CA_PASSWD" --passout="env:ROOT_CA_PASSWD" --pki-dir=${ROOT_CA_DIR} --days=${DAYS} sign-req ca ${CA_NAME}
     cp ${ROOT_CA_DIR}/issued/${CA_NAME}.crt ${CA_DIR}/ca.crt
+    rm -f ${ROOT_CA_DIR}/reqs/${CA_NAME}.req
 fi
 
 # public certificate

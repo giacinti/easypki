@@ -4,17 +4,22 @@ source $(dirname $(realpath $0))/settings
 read -p "CA name: " CA_NAME
 read -p "Do you confirm (enter the CA name again): " CA_NAME2
 if [[ ! "${CA_NAME}" = "${CA_NAME2}" ]]; then
-    echo "names do not match. Aborting..."
+    echo "ERROR: names do not match. Aborting..."
     exit 0
 fi
 
-#
 CA_DIR=${DATA_PKI}/${CA_NAME}
 CA_CERT=${CA_DIR}/ca.crt
 if [[ ! -e ${CA_CERT} ]]; then
     echo "ERROR: CA ${CA_NAME} not found."
     exit 1
 fi
+read -s -p "CA password: " CA_PASSWD; echo
+if ! `openssl pkey -in ${CA_DIR}/private/ca.key -passin "pass:${CA_PASSWD}" -noout >/dev/null 2>&1`; then
+    echo "ERROR: password is incorrect. Aborting..."
+    exit 1
+fi
+
 SUBJECT_DN=$(openssl x509 -in ${CA_CERT} -subject -noout | sed -e 's|subject=||')
 ISSUER_DN=$(openssl x509 -in ${CA_CERT} -issuer -noout | sed -e 's|issuer=||')
 
