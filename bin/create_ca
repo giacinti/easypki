@@ -61,9 +61,9 @@ fi
 
 # public certificate
 #openssl x509 -in ${CA_DIR}/ca.crt -outform DER > ${PUB_DIR}/${CA_NAME}.crt
-: > ${PUB_DIR}/${CA_NAME}.crt
+cat ${CA_DIR}/ca.crt > ${PUB_DIR}/${CA_NAME}.crt
 [[ "$MODE" = "sub" ]] && cat ${ROOT_CA_DIR}/ca.crt >> ${PUB_DIR}/${CA_NAME}.crt
-cat ${CA_DIR}/ca.crt >> ${PUB_DIR}/${CA_NAME}.crt
+
 
 # CRLs generation & rotation
 ${BIN_DIR}/update_crl ${CA_NAME} ${CA_PASSWD}
